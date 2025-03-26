@@ -1,0 +1,16 @@
+# macOS system files
+.DS_Store
+data/.DS_Store
+data/MNIST/.DS_Store
+
+# IDE settings
+.idea/
+
+# Python cache files
+__pycache__/
+
+# Virtual environment
+mnist_env/
+
+# Generated files
+confusion_matrix.png

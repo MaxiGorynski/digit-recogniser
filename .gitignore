@@ -6,11 +6,10 @@ data/MNIST/.DS_Store
 # IDE settings
 .idea/
 
-# Python cache files
+#Python cache
 __pycache__/
 
-# Virtual environment
+#venv
 mnist_env/
 
-# Generated files
-confusion_matrix.png
+mnist_model.pth

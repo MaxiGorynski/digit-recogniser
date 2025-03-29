@@ -64,14 +64,14 @@ class AugmentedMNIST(Dataset):
 
         image, label = self.original_dataset[sample_idx]
 
-        # Convert tensor to PIL for augmentations
+        #Convert tensor to PIL for augmentations
         from torchvision.transforms import ToPILImage, ToTensor, Normalize
         image_pil = ToPILImage()(image)
 
-        # Apply augmentation
+        #Apply augmentation
         aug_image = self.transforms_list[transform_idx](image_pil)
 
-        # Convert back to tensor and normalize
+        #Convert back to tensor and normalize
         aug_tensor = ToTensor()(aug_image)
         aug_tensor = Normalize((0.1307,), (0.3081,))(aug_tensor)
 
@@ -79,22 +79,22 @@ class AugmentedMNIST(Dataset):
 
 
 def train_model(epochs=5, batch_size=64, learning_rate=0.001, focus_digits=None):
-    # Prepare data transformations
+    #Prepare data transformations
     transform = transforms.Compose([
         transforms.ToTensor(),
         transforms.Normalize((0.1307,), (0.3081,))
     ])
 
-    # Load ds
+    #Load ds
     train_dataset = datasets.MNIST('./data', train=True, download=True, transform=transform)
     test_dataset = datasets.MNIST('./data', train=False, transform=transform)
 
-    # Apply data augmentation for specific digits if specified
+    #Apply data augmentation for specific digits if specified
     if focus_digits is not None:
         from torch.utils.data import ConcatDataset
         import torchvision.transforms as T
 
-        # Define augmentation transforms
+        #Define augmentation transforms
         transform_list = [
             T.RandomRotation(15),  # Rotate by up to 15 degrees
             T.RandomAffine(0, translate=(0.1, 0.1)),  # Small translations
@@ -102,10 +102,10 @@ def train_model(epochs=5, batch_size=64, learning_rate=0.001, focus_digits=None)
             T.RandomAffine(0, shear=10),  # Shear transformations
         ]
 
-        # Create datasets for each digit and augmentation
+        #Create datasets for each digit and augmentation
         augmented_datasets = []
         for digit in focus_digits:
-            # Create dataset applying all augmentations to the digit
+            #Create dataset applying all augmentations to the digit
             aug_dataset = AugmentedMNIST(train_dataset, digit, transform_list)
             augmented_datasets.append(aug_dataset)
 
@@ -117,19 +117,19 @@ def train_model(epochs=5, batch_size=64, learning_rate=0.001, focus_digits=None)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
-    # Init. model
+    #Init. model
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = MNISTNet().to(device)
 
-    # Loss func, optimiser
+    #Loss func, optimiser
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
-    # Training loop
+    #Training loop
     train_losses = []
     test_accuracies = []
 
     for epoch in range(1, epochs + 1):
-        # Training phase
+        #Training phase
         model.train()
         running_loss = 0.0
 
@@ -150,7 +150,7 @@ def train_model(epochs=5, batch_size=64, learning_rate=0.001, focus_digits=None)
         avg_loss = running_loss / len(train_loader)
         train_losses.append(avg_loss)
 
-        # Testing
+        #Testing
         model.eval()
         correct = 0
         digit_correct = {digit: 0 for digit in range(10)}
@@ -173,18 +173,18 @@ def train_model(epochs=5, batch_size=64, learning_rate=0.001, focus_digits=None)
         accuracy = 100. * correct / len(test_loader.dataset)
         test_accuracies.append(accuracy)
 
-        # Print per-digit accuracies
+        #Print per-digit accuracies
         print(f'Epoch {epoch}/{epochs}, Average Loss: {avg_loss:.4f}, Test Accuracy: {accuracy:.2f}%')
         for digit in range(10):
             if digit_total[digit] > 0:
                 digit_acc = 100. * digit_correct[digit] / digit_total[digit]
                 print(f'  Digit {digit} Accuracy: {digit_acc:.2f}%')
 
-    # Save model
-    torch.save(model.state_dict(), 'mnist_model.pth')
+    #Save model
+    torch.save(model.state_dict(), '../mnist_model.pth')
     print(f'Model saved to mnist_model.pth')
 
-    # Plot TL/TA
+    #Plot TL/TA
     plt.figure(figsize=(12, 5))
 
     plt.subplot(1, 2, 1)
@@ -207,6 +207,6 @@ def train_model(epochs=5, batch_size=64, learning_rate=0.001, focus_digits=None)
 
 
 if __name__ == "__main__":
-    # Train with special focus on digit 6 to improve distinction from 9
+    #Train with special focus on digit 6 to improve distinction from 9
     model, accuracy = train_model(epochs=5, focus_digits=[6])
     print(f"Final model accuracy: {accuracy:.2f}%")

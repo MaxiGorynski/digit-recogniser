@@ -4,7 +4,6 @@ import torch.nn.functional as F
 import numpy as np
 from PIL import Image
 import io
-import base64
 from datetime import datetime
 import psycopg2
 from psycopg2 import pool
@@ -12,7 +11,7 @@ import torchvision.transforms as transforms
 from streamlit_drawable_canvas import st_canvas
 
 #Model import
-from digit_classifier import MNISTNet
+from app.digit_classifier import MNISTNet
 
 #Db connection pool
 connection_pool = None
@@ -167,9 +166,15 @@ def main():
                 st.image(processed_img, width=150)
 
             if st.button("Predict"):
-                prediction, confidence = predict_digit(model, image_tensor)
+                prediction, confidence, all_probs = predict_digit(model, image_tensor)
 
-                #Prediction/confidence score display
+                # Store in session state
+                st.session_state.prediction = prediction
+                st.session_state.confidence = confidence
+                st.session_state.all_probs = all_probs
+                st.session_state.img_bytes = img_byte_arr.getvalue()
+
+                # Display prediction and confidence
                 st.markdown(f"## Prediction: **{prediction}**")
                 st.markdown(f"Confidence: {confidence * 100:.2f}%")
 
@@ -185,10 +190,19 @@ def main():
                                              value=prediction,
                                              step=1)
 
-                if st.button("Submit True Label"):
-                    #Log true label
-                    log_prediction(img_bytes, prediction, confidence, true_label)
-                    st.success(f"Logged prediction: {prediction} (true: {true_label})")
+                if st.button("Submit Feedback"):
+                    # Check if prediction exists in session state
+                    if "prediction" in st.session_state:
+                        # Log to db
+                        if db_manager.log_prediction(
+                                st.session_state.img_bytes,
+                                st.session_state.prediction,
+                                st.session_state.confidence,
+                                true_label
+                        ):
+                            st.success(f"Logged prediction: {st.session_state.prediction} (true: {true_label})")
+                        else:
+                            st.error("Failed to log prediction to database")
 
 
 if __name__ == "__main__":

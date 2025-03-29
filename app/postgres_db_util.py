@@ -1,35 +1,33 @@
 import psycopg2
-from psycopg2 import pool
 import pandas as pd
 from datetime import datetime
+import streamlit as st
 
 
 class DatabaseManager:
     def __init__(self, host="localhost", database="digit_recognizer",
-                 user="alice", password="inwonderland", min_conn=1, max_conn=5):
-        """Initialize the database connection pool"""
+                 user="alice", password="inwonderland"):
+        """Initialize the database connection"""
         self.connection_params = {
             "host": host,
             "database": database,
             "user": user,
             "password": password
         }
-        self.min_conn = min_conn
-        self.max_conn = max_conn
-        self.pool = None
-        self.conn = None  # Single connection instead of pool
+        self.conn = None
 
     def initialize(self):
-        """Create a single connection instead of a pool"""
+        """Create a database connection"""
         if self.conn is None:
             try:
-                # Create a single connection instead of a pool
+                # Create a single connection
                 self.conn = psycopg2.connect(**self.connection_params)
 
                 # Create tables
                 self._create_tables()
                 return True
             except Exception as e:
+                st.error(f"Database connection error: {e}")
                 print(f"Error initializing database: {e}")
                 return False
         return True
@@ -61,15 +59,18 @@ class DatabaseManager:
             ''')
             self.conn.commit()
             cursor.close()
+            print("Database tables created successfully")
         except Exception as e:
             if self.conn:
                 self.conn.rollback()
+            st.error(f"Table creation error: {e}")
             print(f"Error creating tables: {e}")
 
     def log_prediction(self, image_bytes, prediction, confidence, true_label):
         """Log a prediction to the database"""
         if self.conn is None:
             if not self.initialize():
+                st.error("Failed to initialize database connection")
                 return False
 
         try:
@@ -80,10 +81,12 @@ class DatabaseManager:
             )
             self.conn.commit()
             cursor.close()
+            print(f"Successfully logged prediction: {prediction} (true: {true_label})")
             return True
         except Exception as e:
             if self.conn:
                 self.conn.rollback()
+            st.error(f"Error logging prediction: {e}")
             print(f"Error logging prediction: {e}")
             return False
 
@@ -91,6 +94,7 @@ class DatabaseManager:
         """Get recent predictions from the database"""
         if self.conn is None:
             if not self.initialize():
+                st.error("Database connection not available")
                 return None
 
         try:
@@ -101,8 +105,10 @@ class DatabaseManager:
                 LIMIT %s
             """
             df = pd.read_sql_query(query, self.conn, params=(limit,))
+            print(f"Retrieved {len(df)} predictions from database")
             return df
         except Exception as e:
+            st.error(f"Error fetching predictions: {e}")
             print(f"Error fetching predictions: {e}")
             return None
 
@@ -110,6 +116,7 @@ class DatabaseManager:
         """Calculate model accuracy from stored predictions"""
         if self.conn is None:
             if not self.initialize():
+                st.error("Database connection not available")
                 return None, 0
 
         try:
@@ -130,6 +137,7 @@ class DatabaseManager:
                 return accuracy, total
             return 0, 0
         except Exception as e:
+            st.error(f"Error calculating accuracy: {e}")
             print(f"Error calculating accuracy: {e}")
             return None, 0
 
@@ -138,3 +146,4 @@ class DatabaseManager:
         if self.conn:
             self.conn.close()
             self.conn = None
+            print("Database connection closed")

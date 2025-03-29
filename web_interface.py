@@ -51,24 +51,28 @@ def initialize_db_pool():
 
 
 #Prediction to PostgreSQL
-def log_prediction(image_bytes, prediction, confidence, true_label):
-    if connection_pool is None:
-        st.warning("Database connection not initialized")
-        return
+def log_prediction(self, image_bytes, prediction, confidence, true_label):
+    """Log a prediction to the database"""
+    if self.conn is None:
+        if not self.initialize():
+            print("Failed to initialize database connection")
+            return False
 
-    conn = connection_pool.getconn()
     try:
-        with conn.cursor() as cur:
-            cur.execute(
-                "INSERT INTO predictions (timestamp, image, predicted_digit, confidence, true_label) VALUES (%s, %s, %s, %s, %s)",
-                (datetime.now(), psycopg2.Binary(image_bytes), prediction, confidence, true_label)
-            )
-        conn.commit()
-        st.success("Prediction logged to database")
+        cursor = self.conn.cursor()
+        cursor.execute(
+            "INSERT INTO predictions (timestamp, image, predicted_digit, confidence, true_label) VALUES (%s, %s, %s, %s, %s)",
+            (datetime.now(), psycopg2.Binary(image_bytes), prediction, confidence, true_label)
+        )
+        self.conn.commit()
+        cursor.close()
+        print(f"Successfully logged prediction: {prediction} (true: {true_label})")
+        return True
     except Exception as e:
-        st.error(f"Failed to log prediction: {e}")
-    finally:
-        connection_pool.putconn(conn)
+        if self.conn:
+            self.conn.rollback()
+        print(f"Error logging prediction: {e}")
+        return False
 
 
 #Load trained model

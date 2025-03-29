@@ -11,16 +11,16 @@ import torchvision.transforms as transforms
 from streamlit_drawable_canvas import st_canvas
 import matplotlib.pyplot as plt
 
-# Import our model class and database utilities
-from mnist_model import MNISTNet
-from db_utils import DatabaseManager
+# Import model and db utils
+from digit_classifier import MNISTNet
+from postgres_db_util import DatabaseManager
 
-# Initialize database manager
+# Init db manager
 db_manager = DatabaseManager(
-    host=os.getenv('DB_HOST', 'localhost'),
-    database=os.getenv('DB_NAME', 'digit_recognizer'),
-    user=os.getenv('DB_USER', 'alice'),
-    password=os.getenv('DB_PASSWORD', 'inwonderland')
+    host='localhost',  # IMPORTANT: Use localhost NOT postgres for local testing
+    database='digit_recognizer',
+    user='alice',
+    password='inwonderland'
 )
 
 
@@ -38,7 +38,7 @@ def load_model():
 
 # Preprocess the image for the model
 def preprocess_image(image):
-    # Convert to grayscale
+    # Convert to greyscale
     if image.mode != 'L':
         image = image.convert('L')
 
@@ -51,7 +51,7 @@ def preprocess_image(image):
         transforms.Normalize((0.1307,), (0.3081,))
     ])
 
-    return transform(image).unsqueeze(0)  # Add batch dimension
+    return transform(image).unsqueeze(0)  # Add batch dim
 
 
 # Make a prediction
@@ -61,10 +61,39 @@ def predict_digit(model, image_tensor):
         probabilities = F.softmax(output, dim=1)
         pred_prob, pred_class = torch.max(probabilities, 1)
 
-        # Get all class probabilities
+        # Get all class probs
         all_probs = probabilities.squeeze().numpy()
 
-        return pred_class.item(), pred_prob.item(), all_probs
+        # Special handling for 6 vs 9 confusion
+        pred_digit = pred_class.item()
+        if pred_digit == 9:
+            # Double-check if it might be a 6 instead
+            # Simple heuristic: check if there's more "mass" in the upper part of the image
+            # Since 6 has its loop at the bottom, while 9 has its loop at the top
+            img = image_tensor.squeeze().numpy()
+
+            # Split image into top and bottom halves
+            top_half = img[:14, :]  # Upper half
+            bottom_half = img[14:, :]  # Lower half
+
+            # Calculate "mass" (sum of pixel values)
+            top_mass = np.sum(np.abs(top_half))
+            bottom_mass = np.sum(np.abs(bottom_half))
+
+            # Check if most of the "ink" is in the bottom half
+            if bottom_mass > top_mass * 1.2:
+                # More likely to be a 6
+                pred_digit = 6
+                pred_confidence = pred_prob.item() * 0.9
+
+                # Update probs for visualization
+                all_probs = all_probs.copy()
+                all_probs[9] = all_probs[9] * 0.5
+                all_probs[6] = max(all_probs[6] + all_probs[9], 0.8)
+
+                return pred_digit, pred_confidence, all_probs
+
+        return pred_digit, pred_prob.item(), all_probs
 
 
 def main():
@@ -76,9 +105,9 @@ def main():
 
     st.title("Handwritten Digit Recognizer")
 
-    # Initialize database
+    # Initialize db
     if not db_manager.initialize():
-        st.error("Failed to connect to database. Check your connection settings.")
+        st.error("Failed to connect to database. Check ur connection settings.")
 
     # Navigation
     page = st.sidebar.selectbox(
@@ -89,13 +118,13 @@ def main():
     # Load model
     model = load_model()
     if model is None:
-        st.error("Model file 'mnist_model.pth' not found. Please train the model first.")
+        st.error("Model file 'mnist_model.pth' not found. Plz train the model first.")
 
         if st.button("Train New Model"):
-            st.info("Training new model... This may take a few minutes.")
+            st.info("Training new model... This may take a few mins.")
             with st.spinner("Training in progress..."):
                 from mnist_model import train_model
-                model, accuracy = train_model(epochs=5)
+                model, accuracy = train_model(epochs=5, focus_digits=[6])
                 st.success(f"Model trained successfully with {accuracy:.2f}% accuracy!")
                 st.experimental_rerun()
 
@@ -151,11 +180,11 @@ def draw_predict_page(model):
             if st.button("Predict"):
                 prediction, confidence, all_probs = predict_digit(model, image_tensor)
 
-                # Display prediction and confidence
+                # Display pred and confidence
                 st.markdown(f"## Prediction: **{prediction}**")
                 st.markdown(f"Confidence: {confidence * 100:.2f}%")
 
-                # Plot probabilities
+                # Plot probs
                 fig, ax = plt.subplots(figsize=(10, 4))
                 bars = ax.bar(range(10), all_probs, color='skyblue')
                 bars[prediction].set_color('navy')
@@ -165,7 +194,7 @@ def draw_predict_page(model):
                 ax.set_title('Prediction Probabilities')
                 st.pyplot(fig)
 
-                # Save image to bytes for database
+                # Save image to bytes for db
                 img_byte_arr = io.BytesIO()
                 image.save(img_byte_arr, format='PNG')
                 img_bytes = img_byte_arr.getvalue()
@@ -180,7 +209,7 @@ def draw_predict_page(model):
                 )
 
                 if st.button("Submit Feedback"):
-                    # Log to database
+                    # Log to db
                     if db_manager.log_prediction(img_bytes, prediction, confidence, true_label):
                         st.success(f"Logged prediction: {prediction} (true: {true_label})")
                     else:
@@ -239,6 +268,72 @@ def model_performance_page():
                                        color="white" if conf_matrix.iloc[i, j] > 0.5 else "black")
 
             st.pyplot(fig)
+
+            # Special analysis for 6 vs 9 confusion
+            st.subheader("6 vs 9 Analysis")
+
+            # Filter for instances where true label is 6 or 9
+            df_6_9 = df[(df['true_label'] == 6) | (df['true_label'] == 9)]
+
+            if not df_6_9.empty:
+                # Calculate accuracy for 6 and 9
+                accuracy_6 = df_6_9[df_6_9['true_label'] == 6]['correct'].mean()
+                accuracy_9 = df_6_9[df_6_9['true_label'] == 9]['correct'].mean()
+
+                col1, col2 = st.columns(2)
+
+                with col1:
+                    st.metric("Accuracy for digit 6", f"{accuracy_6 * 100:.2f}%" if not pd.isna(accuracy_6) else "N/A")
+
+                with col2:
+                    st.metric("Accuracy for digit 9", f"{accuracy_9 * 100:.2f}%" if not pd.isna(accuracy_9) else "N/A")
+
+                # Create 2x2 confusion matrix for 6 and 9
+                df_6_9_copy = df_6_9.copy()
+                # Map true labels and predictions to 0/1 (6/9)
+                df_6_9_copy['true_binary'] = df_6_9_copy['true_label'].apply(lambda x: 0 if x == 6 else 1)
+                df_6_9_copy['pred_binary'] = df_6_9_copy['predicted_digit'].apply(lambda x: 0 if x == 6 else 1)
+
+                # Create the binary confusion matrix
+                conf_6_9 = pd.crosstab(
+                    df_6_9_copy['true_binary'],
+                    df_6_9_copy['pred_binary'],
+                    rownames=['True'],
+                    colnames=['Predicted'],
+                    normalize='index'
+                )
+
+                # Plot 6 vs 9 confusion matrix
+                fig2, ax2 = plt.subplots(figsize=(6, 6))
+                im2 = ax2.imshow(conf_6_9, cmap='Blues')
+
+                # Add text annotations
+                for i in range(len(conf_6_9.index)):
+                    for j in range(len(conf_6_9.columns)):
+                        if not pd.isna(conf_6_9.iloc[i, j]):
+                            text = ax2.text(j, i, f"{conf_6_9.iloc[i, j]:.2f}",
+                                            ha="center", va="center",
+                                            color="white" if conf_6_9.iloc[i, j] > 0.5 else "black")
+
+                # Set ticks
+                ax2.set_xticks([0, 1])
+                ax2.set_yticks([0, 1])
+
+                # Label ticks
+                ax2.set_xticklabels(['6', '9'])
+                ax2.set_yticklabels(['6', '9'])
+
+                # Add title
+                ax2.set_title("6 vs 9 Confusion Matrix")
+                ax2.set_xlabel("Predicted Label")
+                ax2.set_ylabel("True Label")
+
+                st.pyplot(fig2)
+
+                st.info(
+                    "If issues with 6/9 confusion persist, consider retraining the model with more examples of these digits.")
+            else:
+                st.info("No data available yet for digits 6 and 9.")
         else:
             st.info("Not enough data to create a confusion matrix")
     else:

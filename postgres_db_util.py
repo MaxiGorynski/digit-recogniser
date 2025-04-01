@@ -2,19 +2,21 @@ import psycopg2
 import pandas as pd
 from datetime import datetime
 import streamlit as st
+import os
 
 
 class DatabaseManager:
-    def __init__(self, host="localhost", database="digit_recognizer",
-                 user="alice", password="inwonderland"):
+    def __init__(self, host=None, database=None, user=None, password=None):
         """Initialize the database connection"""
+        # Use environment variables if provided, otherwise use defaults
         self.connection_params = {
-            "host": host,
-            "database": database,
-            "user": user,
-            "password": password
+            "host": host or os.environ.get('DB_HOST', 'localhost'),
+            "database": database or os.environ.get('DB_NAME', 'digit_recognizer'),
+            "user": user or os.environ.get('DB_USER', 'alice'),
+            "password": password or os.environ.get('DB_PASSWORD', 'inwonderland')
         }
         self.conn = None
+        print(f"Database connection params (host): {self.connection_params['host']}")
 
     def initialize(self):
         """Create a database connection"""
@@ -25,6 +27,7 @@ class DatabaseManager:
 
                 # Create tables
                 self._create_tables()
+                print("Database connection successful")
                 return True
             except Exception as e:
                 st.error(f"Database connection error: {e}")
@@ -57,6 +60,12 @@ class DatabaseManager:
                     total_predictions INTEGER
                 )
             ''')
+
+            # Create indexes for better performance
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_predictions_timestamp ON predictions(timestamp)')
+            cursor.execute(
+                'CREATE INDEX IF NOT EXISTS idx_predictions_digits ON predictions(predicted_digit, true_label)')
+
             self.conn.commit()
             cursor.close()
             print("Database tables created successfully")

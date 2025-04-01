@@ -6,6 +6,14 @@ from PIL import Image
 import io
 import os
 from datetime import datetime
+import streamlit as st
+import torch
+import torch.nn.functional as F
+import numpy as np
+from PIL import Image
+import io
+import os
+from datetime import datetime
 import pandas as pd
 import torchvision.transforms as transforms
 from streamlit_drawable_canvas import st_canvas
@@ -15,21 +23,19 @@ import matplotlib.pyplot as plt
 from digit_classifier import MNISTNet
 from postgres_db_util import DatabaseManager
 
-#Init db manager
-db_manager = DatabaseManager(
-    host='localhost',  # IMPORTANT: Use localhost NOT postgres for local testing
-    database='digit_recognizer',
-    user='alice',
-    password='inwonderland'
-)
+#Init db manager - environment variables in Docker
+db_manager = DatabaseManager()
 
+#Set model path - use models directory in Docker
+MODEL_PATH = 'mnist_model.pth'
+os.makedirs('models', exist_ok=True)
 
 #Load model
 @st.cache_resource
 def load_model():
     model = MNISTNet()
     try:
-        model.load_state_dict(torch.load('../mnist_model.pth', map_location=torch.device('cpu')))
+        model.load_state_dict(torch.load(MODEL_PATH, map_location=torch.device('cpu')))
         model.eval()
         return model
     except FileNotFoundError:
@@ -122,10 +128,10 @@ def main():
         if st.button("Train New Model"):
             st.info("Training new model... This may take a few mins.")
             with st.spinner("Training in progress..."):
-                from mnist_model import train_model
+                from digit_classifier import train_model
                 model, accuracy = train_model(epochs=5, focus_digits=[6])
                 st.success(f"Model trained successfully with {accuracy:.2f}% accuracy!")
-                st.experimental_rerun()
+                st.rerun()
 
         return
 

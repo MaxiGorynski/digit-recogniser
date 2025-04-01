@@ -19,8 +19,8 @@ class MNISTNet(nn.Module):
         self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
         self.dropout1 = nn.Dropout2d(0.25)
         self.dropout2 = nn.Dropout2d(0.5)
-        # Calculate the correct input size for the fully connected layer
-        # MNIST images are 28x28. After two 2x2 max pooling operations, they become 7x7
+        #Calculate the correct input size for the fully connected layer
+        #MNIST images are 28x28. After two 2x2 max pooling operations, they become 7x7
         self.fc1 = nn.Linear(64 * 7 * 7, 128)
         self.fc2 = nn.Linear(128, 10)
 
@@ -33,7 +33,7 @@ class MNISTNet(nn.Module):
         x = F.relu(x)
 
         x = self.pool(x)
-        x = self.pool(x)  # Apply pooling twice to get from 28x28 to 7x7
+        x = self.pool(x)  #Apply pooling twice to get from 28x28 to 7x7
 
         x = self.dropout1(x)
         x = torch.flatten(x, 1)
@@ -47,7 +47,7 @@ class MNISTNet(nn.Module):
         return F.log_softmax(x, dim=1)
 
 
-# Custom dataset for digit-specific augmentation
+#Custom dataset for digit-specific augmentation
 class AugmentedMNIST(Dataset):
     def __init__(self, original_dataset, digit, transforms_list):
         self.original_dataset = original_dataset
@@ -181,7 +181,7 @@ def train_model(epochs=5, batch_size=64, learning_rate=0.001, focus_digits=None)
                 print(f'  Digit {digit} Accuracy: {digit_acc:.2f}%')
 
     #Save model
-    torch.save(model.state_dict(), '../mnist_model.pth')
+    torch.save(model.state_dict(), 'mnist_model.pth')
     print(f'Model saved to mnist_model.pth')
 
     #Plot TL/TA

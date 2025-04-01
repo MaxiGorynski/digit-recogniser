@@ -11,7 +11,7 @@ import torchvision.transforms as transforms
 from streamlit_drawable_canvas import st_canvas
 
 #Model import
-from app.digit_classifier import MNISTNet
+from digit_classifier import MNISTNet
 
 #Db connection pool
 connection_pool = None
